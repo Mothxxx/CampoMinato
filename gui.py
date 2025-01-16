@@ -1,4 +1,4 @@
-from ezgraphics import GraphicsWindow,  GraphicsMenu
+from ezgraphics import GraphicsWindow
 from campo_minato import Partita
 class Gui:
     def __init__(self, p:'Partita'):
@@ -133,7 +133,7 @@ class Gui:
     def _gestisci_click(self, window, event):
         col = event.x // self.square_size
         row = event.y // self.square_size
-        print(f"Cliccato su: riga={row}, colonna={col}") 
+        print(f"Cliccato su: riga={row+1}, colonna={col+1}") 
         
         # Controlla se il click è nella barra menu
         for text, (x, y, width, height) in self.menu_buttons.items():
@@ -164,15 +164,13 @@ class Gui:
                 print("Non puoi scoprire una casella segnata.")
             else:
                 self.partita.scopriCasella(row, col)  
-                stato_partita = self.partita.partita_finita()
                 
-           
-                if stato_partita == "persa":
+                if self.partita.stato_corrente == 2:
                     print("Hai colpito una mina! Visualizzazione di tutte le mine...")
                     self.partita.visualizza_mine() 
                     self._visualizza_game_over()
                     self.win.wait() 
-                elif stato_partita == "vinta":
+                elif self.partita.stato_corrente == 1:
                     print("Hai vinto!")
                     self._visualizza_vittoria()
                     self.win.wait() 
@@ -194,5 +192,5 @@ class Gui:
             
    
 
-partita = Partita(larghezza=15, altezza=15, n_mine= 15)
+partita = Partita(larghezza=15, altezza=15, n_mine=3)
 gui = Gui(partita)

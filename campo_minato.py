@@ -43,12 +43,12 @@ class Tabellone:
     def is_segnata(self, r: int, c: int) -> bool:
         return self.get_idx(r, c) in self.segnate 
     
-    def scopri_casella(self, riga:int, colonna:int) -> None:
-        idx: int = riga * self.colonne + colonna
+    def scopri_casella(self, r:int, c:int) -> None:
+        idx: int = self.get_idx(r, c)
         self.scoperte.add(idx)  
         
-    def is_coperta(self, riga: int, colonna: int) -> bool:
-        idx: int = self.get_idx(riga, colonna)
+    def is_coperta(self, r: int, c: int) -> bool:
+        idx: int = self.get_idx(r, c)
         return idx not in self.scoperte
 
     # metodo aggiuntivo
@@ -75,27 +75,34 @@ class Tabellone:
         return count
     
     def get_idx(self, r: int, c: int) -> int:
-        return r * self.colonne + c
-    
+        idx = r  * self.colonne + c 
+
+        return idx
+
+    def calcola_cella(self, idx: int) -> str:
+        """Restituisce la rappresentazione della cella, centralizzando i calcoli."""
+        if idx in self.scoperte:
+            if idx in self.mine:
+                return "Z"  # Mines are revealed
+            else:
+                # Verifica che il dizionario esista
+                if idx in self.mine_adiacenti_cache:
+                    return str(self.mine_adiacenti_cache[idx] )
+                else:
+                    return "0"  # No mines around, empty cell
+        elif idx in self.segnate:
+            return "D" if idx not in self.mine else "Y"  # Marked as flag (D or Y for mine)
+        else:
+            return "C" if idx not in self.mine else "X"  # Covered, empty or mine
+
     def __str__(self) -> str:
         result: List[str] = []
         for r in range(self.righe):
-            row:  List[str] = []
+            row: List[str] = []
             for c in range(self.colonne):
-                idx = self.get_idx(r, c)
-                if idx in self.scoperte:
-                    if idx in self.mine:
-                        row.append("Z")
-                    else:
-                         # Verifica che il dizionario esista
-                        if idx in self.mine_adiacenti_cache:
-                            row.append(str(self.mine_adiacenti_cache[idx]))
-                        else:
-                            row.append("0")  
-                elif idx in self.segnate:
-                    row.append("D" if idx not in self.mine else "Y")
-                else:
-                    row.append("C" if idx not in self.mine else "X")
+                idx = self.get_idx(r+1, c+1)
+                # Usa la funzione calcola_cella per ottenere il valore della cella
+                row.append(self.calcola_cella(idx))
             result.append("".join(row))
         return "\n".join(result)
     
@@ -135,6 +142,10 @@ class Partita:
     @stato_corrente.setter
     def stato_corrente(self, valore: int) -> None:
         self._stato_corrente = valore
+        if valore == 2:
+            print("Game Over! Hai perso.")
+        elif valore == 1:
+            print("Congratulazioni! Hai vinto!")
             
     @property
     def tabellone(self) -> 'Tabellone':
@@ -153,9 +164,10 @@ class Partita:
         self._evoluzione = valore
         
     def _aggiorna_evoluzione(self) -> None:
-        copia_tabellone: 'Tabellone' = self.tabellone.copia_tabellone(self.tabellone)
-        self.evoluzione.append(copia_tabellone)
-        self._mossa_corrente = len(self.evoluzione) - 1 
+        if len(self.evoluzione) == 0 or self.evoluzione[-1] != self.tabellone:
+            copia_tabellone: 'Tabellone' = self.tabellone.copia_tabellone(self.tabellone)
+            self.evoluzione.append(copia_tabellone)
+
     
     def segna_casella(self, r: int, c: int) -> None:
         if self.stato_corrente != 0:
@@ -165,14 +177,15 @@ class Partita:
         
         # Aggiungi la mossa al dizionario delle mosse
         self.mosse[self._mossa_corrente] = (r, c)
-        self._mossa_corrente += 1
+        self.tabellone.segna_casella(r, c)
         self._aggiorna_evoluzione()
+        self._mossa_corrente += 1
             
     def get_casella_segnata(self, r: int, c: int) -> bool:
         return self.tabellone.is_segnata(r, c)
 
     def scopriCasella(self, r: int, c: int) -> None:
-        if not self._partita_in_corso():
+        if self.stato_corrente != 0:
             raise RuntimeError("La partita non è in corso.")
         if self.get_casella_segnata(r, c):
             raise ValueError("La casella è segnata come mina.")
@@ -180,17 +193,29 @@ class Partita:
             raise ValueError("La casella è già scoperta.")
             
         idx: int = self.tabellone.get_idx(r, c)
+        self.mosse[self._mossa_corrente] = (r, c)
+        self._mossa_corrente += 1
+        
         if idx in self.tabellone.mine:
             self.tabellone.scopri_casella(r, c)
             self.stato_corrente = 2  # Partita terminata senza successo
-            self.mosse[self._mossa_corrente] = (r, c) 
+
         else:
             self._scopri_ricorsivo(r, c)
-            if all(
-                idx in self.tabellone.mine or not self.tabellone.is_coperta(r, c)
-                for r in range(self.altezza) for c in range(self.larghezza)):
-                self.stato_corrente = 1  # Partita terminata con successo 
-        self._aggiorna_evoluzione()
+            self._aggiorna_evoluzione()
+            
+        # Verifica le condizioni di vittoria
+        celle_totali = self.tabellone.righe * self.tabellone.colonne
+        num_mine = len(self.tabellone.mine)
+        num_celle_scoperte = len(self.tabellone.scoperte)
+        # Verifica se tutte le mine sono segnate correttamente
+        mine_segnate = len(self.tabellone.segnate)
+        
+        if mine_segnate == num_mine and num_celle_scoperte == (celle_totali - num_mine):
+            self.stato_corrente = 1  # Partita terminata con successo
+            print("Vittoria!")
+                    
+         
         
     
     def get_mine_adiacenti(self, r: int, c: int) -> int:
@@ -229,10 +254,10 @@ class Partita:
 
         self._tabellone.scopri_casella(r, c)
         if self.tabellone.mine_adiacenti_cache[idx] == 0:
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    if dr != 0 or dc != 0:
-                        self._scopri_ricorsivo(r + dr, c + dc)
+            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                rr, cc = r + dr, c + dc
+                if 0 <= rr < self.tabellone.righe and 0 <= cc < self.tabellone.colonne:
+                    self._scopri_ricorsivo(rr, cc)
                         
     def visualizza_mine(self) -> None:
         for riga in range(self.altezza):
@@ -254,37 +279,20 @@ class Partita:
             return
         if direzione == "avanti" and self._mossa_corrente < len(self._evoluzione) - 1:
             self._mossa_corrente += 1
+            self._tabellone = Tabellone.copia_tabellone(self._evoluzione[self._mossa_corrente])
+
         elif direzione == "indietro" and self._mossa_corrente > 0:
             self._mossa_corrente -= 1
+            self._tabellone = Tabellone.copia_tabellone(self._evoluzione[self._mossa_corrente])
         else:
             print("Mossa non valida o non disponibile.")
             return
-        self._tabellone = Tabellone.copia_tabellone(self._evoluzione[self._mossa_corrente])
         print(f"Mossa {direzione} eseguita. Stato attuale: {self._mossa_corrente + 1}")
-    
-    def _partita_in_corso(self) -> bool:
-        return self.stato_corrente == 0
-
-    def partita_finita(self) -> Optional[str]:
-        """Controlla lo stato della partita: persa, vinta o in corso."""
-        # Controlla se il giocatore ha rivelato una mina (sconfitta)
-        for riga in range(self.altezza):
-            for colonna in range(self.larghezza):
-                if self.contiene_mina(riga, colonna) and not self.is_coperta(riga, colonna):
-                    return "persa"
-        # Controlla se tutte le celle non minate sono state scoperte (vittoria)
-        for riga in range(self.altezza):
-            for colonna in range(self.larghezza):
-                if not self.contiene_mina(riga, colonna) and self.is_coperta(riga, colonna):
-                    return None  # Gioco ancora in corso
-        return "vinta"
-
-
 
 def test():
-    partita = Partita(larghezza=8, altezza=5, n_mine=6)
+    partita = Partita(larghezza=8, altezza=5, n_mine=24)
     partita.segna_casella(2, 3)
     partita.scopriCasella(4, 4)
-    partita.scopriCasella(0, 0)
+    partita.scopriCasella(1, 1)
     print(partita)
 test()
